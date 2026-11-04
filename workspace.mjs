@@ -103,7 +103,7 @@ $('archive').onchange=async()=>{
  const file=$('archive').files[0];if(!file||busy)return;busy=true;$('archive').disabled=true;$('closeProject').disabled=true;
  try{
   message('פותח את קובץ העבודה במכשיר…');
-  const {readArchive}=await import('./project-reader.mjs');const next=await readArchive(file,message);openProject(next);
+  const {readArchive}=await import('./project-reader.mjs?v=2');const next=await readArchive(file,message);openProject(next);
   message('הפרויקט פתוח במכשיר זה. לאחר רענון יש לבחור את ה־ZIP מחדש.'+(next.unmatched?' '+next.unmatched+' שורות חיתוך לא שויכו ליחידה.':''));
  }catch(error){message('לא ניתן לפתוח את הפרויקט. '+(error.message||'יש לבחור ZIP עם דפי Assembly.'),true);}
  finally{busy=false;$('archive').disabled=false;$('closeProject').disabled=false;$('archive').value='';}

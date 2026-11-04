@@ -7,6 +7,21 @@ function decodeName(bytes) {
   catch { return Array.from(bytes, n => n >= 128 && n <= 154 ? String.fromCharCode(0x5d0+n-128) : String.fromCharCode(n)).join(''); }
 }
 const number = /^\d+(?:\.\d+)?$/;
+async function readPageItems(page) {
+  if (page.isPureXfa) return (await page.getTextContent()).items;
+  // Some iPhone browsers support stream readers but not async iteration on streams.
+  const reader = page.streamTextContent().getReader();
+  const items = [];
+  try {
+    for (;;) {
+      const {done, value} = await reader.read();
+      if (done) return items;
+      for (const item of value.items) items.push(item);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+}
 function parseSheet(items, doc, page) {
   const header = items.find(i=>i.str==='Cab#');
   if (!header) return [];
@@ -52,7 +67,7 @@ export async function readArchive(file,onProgress) {
       for(let pageNo=1;pageNo<=document.numPages;pageNo++) {
         if(pageNo===1 || pageNo%4===0)onProgress('קורא מסמך '+(id+1)+' מתוך '+entries.length+' · עמוד '+pageNo+' מתוך '+document.numPages);
         const page=await document.getPage(pageNo);
-        const items=(await page.getTextContent()).items.filter(i=>typeof i.str==='string' && i.str.trim());
+        const items=(await readPageItems(page)).filter(i=>typeof i.str==='string' && i.str.trim());
         const strings=items.map(i=>i.str.trim()),title=strings.map(s=>s.match(/^Assembly\s*#\s*(\d+)\s*-\s*(.*)/i)).find(Boolean);
         if(title) {
           const dims=strings.join(' ').match(/(\d+(?:\.\d+)?)\s*[x×]\s*(\d+(?:\.\d+)?)\s*[x×]\s*(\d+(?:\.\d+)?)/i);
