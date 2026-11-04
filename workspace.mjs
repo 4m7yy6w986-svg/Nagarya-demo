@@ -1,3 +1,4 @@
+import {setupOverview} from './project-overview.mjs';
 import {setupModel} from './unit-model.mjs';
 const $=id=>document.getElementById(id);
 const option=(value,label)=>new Option(label,value);
@@ -14,6 +15,33 @@ let project=demo,unit=demo.units[0],mode='model',selected=-1,renderJob=null,draw
 const renders=new Map();
 const names=['בדיקת תכולת הארגזים','פילוס וחיבור יחידות','הרכבת חזיתות','בדיקת מגירות וצירים','סוקלים וסגירות','ניקיון ובדיקת גמר','תיעוד חוסרים והשלמות'];
 const model=setupModel($('scene'),i=>choosePart(i));
+let overviewScroll=0;
+const overview=setupOverview($('roomScenes'),id=>{
+  overviewScroll=window.scrollY;
+  history.pushState({nagariaUnit:id,fileKey:project.key},'');
+  openUnitView(id);
+});
+function showView(detail) {
+  show($('unitDetail'),detail);show($('projectOverview'),!detail);
+  $('screenTitle').textContent=detail?'תיק יחידה':'הדמיית הפרויקט';
+  document.title='NAGARIA OS | '+$('screenTitle').textContent;
+  $('screenHint').textContent=detail?'דפי הרכבה, חלקים ודיווח ליחידה שנבחרה.':'לחץ על הארגז בהדמיה או על המספר שלו כדי לפתוח את תיק היחידה.';
+}
+function openUnitView(id) {
+  showView(true);changeUnit(id);switchTab('viewer');updateMode('model');
+  $('unitDetail').scrollIntoView({block:'start'});$('backOverview').focus({preventScroll:true});
+}
+function returnToOverview() {
+  const id=unit.id;showView(false);overview.refresh(id);
+  window.scrollTo(0,overviewScroll);overview.focus(id);
+}
+$('backOverview').onclick=()=>{if(history.state?.fileKey===project.key)history.back();else returnToOverview();};
+window.addEventListener('popstate',()=>{
+  const state=history.state;
+  if(state?.fileKey===project.key && project.units.some(u=>u.id===state.nagariaUnit))openUnitView(state.nagariaUnit);
+  else returnToOverview();
+});
+
 function cleanName(p){return p.name.replace(/\)(\d+)\(/g,'($1)').trim();}
 function resetSheet(){drawTicket++;renderJob?.cancel();renderJob=null;isLarge=false;$('docScroll').classList.remove('large');$('docZoom').textContent='הגדלת השרטוט';}
 function updateMode(next){
@@ -96,6 +124,7 @@ function openProject(next){
  show($('closeProject'),next!==demo);$('unitPicker').replaceChildren(...next.units.map(u=>option(u.id,unitLabel(u)+(u.wall?' · חדר '+u.room+' · קיר '+u.wall:''))));
  $('unit').replaceChildren(...next.units.map(u=>option(unitLabel(u),unitLabel(u))),option('כללי / באתר','כללי / באתר'));
  changeUnit(next.units[0].id);switchTab('viewer');
+ showView(false);overview.showProject(next);overviewScroll=0;history.replaceState(null,'');
  if(prev!==next)for(const doc of prev.docs)doc.destroy().catch(()=>{});
 }
 function message(text,error=false){$('loadMsg').textContent=text;$('loadMsg').classList.toggle('bad',error);}
@@ -103,7 +132,7 @@ $('archive').onchange=async()=>{
  const file=$('archive').files[0];if(!file||busy)return;busy=true;$('archive').disabled=true;$('closeProject').disabled=true;
  try{
   message('פותח את קובץ העבודה במכשיר…');
-  const {readArchive}=await import('./project-reader.mjs?v=2');const next=await readArchive(file,message);openProject(next);
+  const {readArchive}=await import('./project-reader.mjs?v=3');const next=await readArchive(file,message);openProject(next);
   message('הפרויקט פתוח במכשיר זה. לאחר רענון יש לבחור את ה־ZIP מחדש.'+(next.unmatched?' '+next.unmatched+' שורות חיתוך לא שויכו ליחידה.':''));
  }catch(error){message('לא ניתן לפתוח את הפרויקט. '+(error.message||'יש לבחור ZIP עם דפי Assembly.'),true);}
  finally{busy=false;$('archive').disabled=false;$('closeProject').disabled=false;$('archive').value='';}

@@ -1,3 +1,4 @@
+import {referencePage,buildLayout} from './project-layout.mjs';
 import * as pdfjs from './pdf.min.mjs';
 pdfjs.GlobalWorkerOptions.workerSrc = new URL('./pdf.worker.min.mjs', import.meta.url).href;
 
@@ -59,7 +60,7 @@ export async function readArchive(file,onProgress) {
   const zip=await globalThis.JSZip.loadAsync(bytes,{decodeFileName:decodeName});
   const entries=Object.values(zip.files).filter(x=>!x.dir && !x.name.startsWith('__MACOSX') && /\.pdf$/i.test(x.name));
   if(!entries.length)throw Error('לא נמצאו דפי PDF בארכיון.');
-  const docs=[],units=new Map(),parts=[];
+  const docs=[],units=new Map(),parts=[],references=[];
   try {
     for(const [id,entry] of entries.entries()) {
       const document=await pdfjs.getDocument({data:await entry.async('uint8array'),isEvalSupported:false,useSystemFonts:true,disableFontFace:false}).promise;
@@ -75,7 +76,10 @@ export async function readArchive(file,onProgress) {
           const idNum=Number(title[1]);if(units.has(idNum))throw Error('מספר יחידה מופיע פעמיים. לא ניתן לשייך את החלקים בוודאות.');
           const line=strings.join(' ');
           units.set(idNum,{id:idNum,kind:title[2],w:+dims[1],h:+dims[2],d:+dims[3],room:line.match(/Room\s*#\s*(\d+)/i)?.[1]||'',wall:line.match(/Wall\s*#\s*(\d+)/i)?.[1]||'',doc:id,page:pageNo,parts:[]});
-        } else parts.push(...parseSheet(items,id,pageNo));
+        } else {
+          const ref=referencePage(items,id,pageNo);
+          if(ref)references.push(ref);else parts.push(...parseSheet(items,id,pageNo));
+        }
         page.cleanup();
       }
     }
@@ -85,6 +89,7 @@ export async function readArchive(file,onProgress) {
       const unit=units.get(part.cab);
       if(unit)unit.parts.push(part);else unmatched++;
     }
-    return {key:hash,title:file.name.replace(/\.zip$/i,''),docs,units:[...units.values()].sort((a,b)=>a.id-b.id),unmatched};
+    const ordered=[...units.values()].sort((a,b)=>a.id-b.id);
+    return {key:hash,title:file.name.replace(/\.zip$/i,''),docs,units:ordered,layout:buildLayout(ordered,references),unmatched};
   } catch(err) {await Promise.allSettled(docs.map(doc=>doc.destroy()));throw err;}
 }
